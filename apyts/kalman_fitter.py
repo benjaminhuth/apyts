@@ -38,11 +38,17 @@ class KalmanFitter:
 
         data = [ (s, m, c) for s, m, c in zip(surfaces, measurements, meas_covs) ]
 
+        if len(data) < 3:
+            logging.debug("KF | No fit for less than 3 hits")
+            return None
+
         # forward
         for meas_surface, meas_pars, meas_cov in data:
+            logging.debug("KF | forward step parameter: {}".format(pars))
             prop_result = self.geometry.propagate(pars, from_surface=meas_surface-1, to_surface=meas_surface, cov=cov)
 
             if prop_result is None:
+                logging.debug("KF | forward propagation failed")
                 return None
 
             predicted, predicted_cov = prop_result
@@ -62,21 +68,32 @@ class KalmanFitter:
         smoothed_states.append(filtered_states[-1])
 
         for meas_surface, meas_pars, meas_cov in reversed(data[:-1]):
+            logging.debug("KF | backward step parameter: {}".format(pars))
             prop_result = self.geometry.propagate(pars, from_surface=meas_surface+1, to_surface=meas_surface, cov=cov)
 
             if prop_result is None:
+                logging.debug("KF | backward propagation failed")
                 return None
 
             smoothed, smoothed_cov = kalman_update(prop_result[0], prop_result[1], meas_pars, meas_cov, self.meas_projector)
             pars, cov = smoothed, smoothed_cov
 
             smoothed_states.append((smoothed, smoothed_cov))
+            logging.debug("KF | cov = \n{}".format(smoothed_cov))
 
         # final parameters
         assert meas_surface == 1
-        final, final_cov = self.geometry.propagate(pars, from_surface=1, to_surface=0, cov=cov)
+        prop_result = self.geometry.propagate(pars, from_surface=1, to_surface=0, cov=cov)
 
-        return (final, final_cov), predicted_states, filtered_states, reversed(smoothed_states)
+        if prop_result is None:
+            logging.debug("KF | final propagation failed")
+            return None
+
+        final, final_cov = prop_result
+        logging.debug("KF | final parameter: {}".format(final))
+        logging.debug("KF | cov = \n{}".format(smoothed_cov))
+
+        return (final, final_cov), predicted_states, filtered_states, list(reversed(smoothed_states))
 
 
 

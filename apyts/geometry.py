@@ -130,7 +130,11 @@ class Geometry:
             return new_params
         else:
             jacobian = autograd.jacobian(f)(params)
+            # logging.debug("Jacobian = \n{}".format(jacobian))
+
             new_cov = jacobian @ cov @ jacobian.T
+            assert np.all(np.linalg.eigvals(new_cov) > 0)
+
             return new_params, new_cov
 
 

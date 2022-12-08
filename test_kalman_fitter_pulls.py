@@ -2,13 +2,14 @@ import logging
 
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.stats as stats
 
 from apyts.geometry import *
 from apyts.simulation import *
 from apyts.kalman_fitter import *
 from apyts.constants import *
 import apyts.units as u
+
+from test_utils import plot_hists
 
 def test_pulls():
     logging.info("Start")
@@ -17,7 +18,7 @@ def test_pulls():
                         b_field=2 * u.Tesla,
                         no_plot=True)
 
-    n_particles = 10000
+    n_particles = 1000
 
     ############
     # Simulate #
@@ -76,19 +77,6 @@ def test_pulls():
     mask = np.array([ False if data is None else True for data in fit_data ])
 
     logging.info("fit failed for {}/{} ({:.2f}%) of particles".format(sum(np.logical_not(mask)), len(mask), 100.*sum(np.logical_not(mask))/len(mask)))
-
-    def plot_hists(data, fit_gaussian=False, **kwargs):
-        fig, axes = plt.subplots(1, 3)
-        for ax, idx, name in zip(axes, [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"]):
-            _, bins, _ = ax.hist(data[:,idx], **kwargs, density=fit_gaussian)
-            ax.set_title(name)
-            if fit_gaussian:
-                mean = np.mean(data[:,idx])
-                std = np.std(data[:,idx])
-                x = np.linspace(bins[0], bins[-1], 200)
-                ax.plot(x, stats.norm.pdf(x, mean, std), label="µ={:.2f}, s={:.2f}".format(mean, std))
-            ax.legend()
-        return fig, ax
 
     ###########
     # Analyse #

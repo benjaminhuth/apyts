@@ -72,14 +72,37 @@ def test_single_particle():
 
     geometry.ax.legend()
 
+    fig, axes = plt.subplots(1,3)
+    fig.suptitle("Variance evolution")
+    for ax, idx, name in zip(axes, [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"]):
+        fwd = [ cov[idx, idx] for _, cov in filtered]
+        bwd = [ cov[idx, idx] for _, cov in smoothed] + [final_cov[idx, idx]]
+        ax.plot(fwd + bwd, label="flt/smt")
+
+        fwd = [ cov[idx, idx] for _, cov in predicted]
+        ax.plot(fwd, label="prt")
+
+        ax.vlines([len(fwd), len(fwd)+len(bwd)-2], ymin=ax.get_ylim()[0], ymax=ax.get_ylim()[1], color='black')
+        ax.set_title(name)
+        # ax.set_yscale('log')
+        ax.legend()
+
+    plt.show()
+
     plt.show()
 
 
 
-logging.getLogger().setLevel(logging.INFO)
-logging.basicConfig(format='%(asctime)s\t%(levelname)s\t%(message)s', datefmt='%H:%M:%S')
+if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s\t%(levelname)s\t%(message)s', datefmt='%H:%M:%S')
 
-test_single_particle()
+    plt.set_loglevel("info")
+
+    np.random.seed(12345)
+    np.set_printoptions(precision=5, suppress=True)
+
+    test_single_particle()
 
 
 
