@@ -1,5 +1,6 @@
 import logging
 import pickle
+import warnings
 import datetime
 from typing import NamedTuple
 from pathlib import Path
@@ -22,11 +23,12 @@ def test_pulls():
     logging.info("Start")
     geometry = Geometry([0, 100, 200, 300, 400, 500, 600, 700, 800, 900],
                         surface_radius=300 * u.mm,
+                        thickness_in_x0=0.5*u.mm / kSiRadiationLength,
                         b_field=2 * u.Tesla,
                         no_plot=True,
     )
 
-    n_particles = 100
+    n_particles = 500
     write_to_file = False
 
     if write_to_file:
@@ -38,14 +40,19 @@ def test_pulls():
     ############
 
     std_simulation = 0.01 * u.mm
-    simulate_radiation_loss = False
+    simulate_radiation_loss = True
     simulation = Simulation(geometry, smearing_stddev=std_simulation, simulate_radiation_loss=simulate_radiation_loss)
 
-    charges = np.random.choice([-1, 1], size=n_particles)
-    momenta = np.random.uniform(4.0*u.GeV, 4.0*u.GeV, size=n_particles)
-    phis = np.random.uniform(60*u.degree, 120*u.degree, size=n_particles)
-    locs = np.random.uniform(-10*u.mm, 10*u.mm, size=n_particles)
-    qops = charges / momenta
+    if False:
+        charges = np.random.choice([-1, 1], size=n_particles)
+        momenta = np.random.uniform(4.0*u.GeV, 4.0*u.GeV, size=n_particles)
+        phis = np.random.uniform(60*u.degree, 120*u.degree, size=n_particles)
+        locs = np.random.uniform(-10*u.mm, 10*u.mm, size=n_particles)
+        qops = charges / momenta
+    else:
+        locs = np.full(n_particles, 0*u.mm)
+        phis = np.full(n_particles, 90*u.degree)
+        qops = -1./np.full(n_particles, 4*u.GeV)
 
     true_pars = np.stack((locs, phis, qops), axis=1)
 
@@ -94,6 +101,14 @@ def test_pulls():
 
     smeared_pars = true_pars + smearing
 
+    # hack so that all inital particles are the same
+    smeared_pars = smeared_pars[0]
+    smeared_pars = np.ones((n_particles, 3)) * smeared_pars
+
+    # plot_hists(smeared_pars)
+    # plt.show()
+    # exit()
+
     var_inflation = 100
     covs = np.zeros((n_particles,3,3))
     covs[:,eBoundLoc, eBoundLoc] = var_inflation * std_loc**2
@@ -112,7 +127,7 @@ def test_pulls():
     projector = np.array([[1, 0, 0]])
 
     kf = KalmanFitter(geometry, projector)
-    gsf = GSF(geometry, projector, max_components=2, weight_cutoff=1.e-2, full_kl_divergence=False)
+    gsf = GSF(geometry, projector, max_components=12, weight_cutoff=1.e-8, full_kl_divergence=False)
 
     def fit(fitter, name):
         fit_data = [
@@ -134,16 +149,17 @@ def test_pulls():
 
         # Make residuals
         if type(fitter) == GSF:
-            # final_pars = np.stack([ max(data[0], key=lambda c: c[0])[1] for data in fit_data ])
-            final_pars = np.stack([ gaussian_mixture_moments(data[0])[0] for data in fit_data ])
+            # final_pars = np.stack([ gaussian_mixture_mode(cmps)[0][0] for cmps, _, _, _ in fit_data ])
+            final_pars = np.stack([ max(cmps, key=lambda c: c[0])[1] for cmps, _, _, _ in fit_data ])
+            # final_pars = np.stack([ gaussian_mixture_moments(cmps)[0] for cmps, _, _, _ in fit_data ])
         else:
             final_pars = np.stack([ data[0][0] for data in fit_data ])
 
         residuals = final_pars - true_pars[mask]
 
-        residuals[:, eBoundLoc] = np.clip(residuals[:,eBoundLoc], -2*u.mm, 2*u.mm)
-        residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -10*u.degree, 10*u.degree)
-        residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -0.5, 0.5)
+        # residuals[:, eBoundLoc] = np.clip(residuals[:,eBoundLoc], -2*u.mm, 2*u.mm)
+        # residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -10*u.degree, 10*u.degree)
+        # residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -0.5, 0.5)
 
         res_momentum = abs(1./final_pars[:,eBoundQoP]) - abs(1./true_pars[mask][:,eBoundQoP])
 
@@ -159,16 +175,18 @@ def test_pulls():
 
         ax[0].scatter(res_momentum, energy_loss[mask], alpha=0.3)
 
-        ax[1].set_title("Correlation coefficient")
-        keys = ["res p", "energy_loss"]
-        im = ax[1].imshow(np.corrcoef(np.vstack([res_momentum, energy_loss[mask]])), origin="lower", aspect=0.3, vmin=-1, vmax=1)
-        fig.colorbar(im, ax=ax[1], label='Interactive colorbar')
+        if simulate_radiation_loss:
+            ax[1].set_title("Correlation coefficient")
+            keys = ["res p", "energy_loss"]
+            im = ax[1].imshow(np.corrcoef(np.vstack([res_momentum, energy_loss[mask]])), origin="lower", aspect=0.3, vmin=-1, vmax=1)
+            fig.colorbar(im, ax=ax[1], label='Interactive colorbar')
 
-        ax[1].set_xticks(np.arange(len(keys)))
-        ax[1].set_yticks(np.arange(len(keys)))
+            ax[1].set_xticks(np.arange(len(keys)))
+            ax[1].set_yticks(np.arange(len(keys)))
 
-        ax[1].set_xticklabels(keys)
-        ax[1].set_yticklabels(keys)
+            ax[1].set_xticklabels(keys)
+            ax[1].set_yticklabels(keys)
+
         fig.tight_layout()
 
 
@@ -185,6 +203,7 @@ if __name__ == "__main__":
 
     plt.set_loglevel("warn")
     np.random.seed(1234)
+
     test_pulls()
 
 

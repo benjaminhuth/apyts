@@ -38,7 +38,7 @@ class Simulation:
                     new_p = loss_ratio * abs(1./pars[eBoundQoP])
                     pars[eBoundQoP] = q/new_p
             elif self.simulate_radiation_loss:
-                corrected_thickness = self.geometry.thickness_in_x0 * np.sin(pars[eBoundPhi])
+                corrected_thickness = self.geometry.thickness_in_x0 / np.sin(pars[eBoundPhi])
                 q = pars[eBoundQoP] / abs(pars[eBoundQoP])
                 new_p = self.bethe_heitler_loss(corrected_thickness, abs(1./pars[eBoundQoP]), mass)
                 pars[eBoundQoP] = q/new_p

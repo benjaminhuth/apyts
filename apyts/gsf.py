@@ -64,7 +64,7 @@ class GSF:
 
             factor = stats.norm.pdf(float(measurement),
                                     float(self.projector @ predicted),
-                                    float(meas_cov + self.projector @ predicted_cov @ self.projector.T))
+                                    np.sqrt(float(meas_cov + self.projector @ predicted_cov @ self.projector.T)))
 
             predicted_components[i] = (w*factor, predicted, predicted_cov)
             logging.debug("GSF | reweight {:.3f} -> {:.3f}   {}".format(w, w*factor, predicted))
@@ -91,7 +91,7 @@ class GSF:
         for w, mean, cov in components:
             p_initial = abs(1/mean[eBoundQoP])
             q = mean[eBoundQoP]/abs(mean[eBoundQoP])
-            corrected_thickness = self.geometry.thickness_in_x0 * np.sin(mean[eBoundPhi])
+            corrected_thickness = self.geometry.thickness_in_x0 / np.sin(mean[eBoundPhi])
 
             logging.debug("GSF | (w, p, v_inv_p):  {:.3f}, {:.3f}, {:.3f}".format(w, p_initial, cov[eBoundQoP, eBoundQoP]))
 
@@ -99,11 +99,11 @@ class GSF:
                 # loss_mean = p_f/p_i
                 if direction == PropagationDirection.Forward:
                     new_p = p_initial * loss_mean
-                    new_var_inv_p = loss_var / (p_initial * loss_mean)**2
+                    new_var_inv_p = loss_var / ((p_initial * loss_mean)**2)
                     assert new_p <= p_initial
                 else:
                     new_p = p_initial / loss_mean
-                    new_var_inv_p = loss_var / p_initial**2
+                    new_var_inv_p = loss_var / (p_initial**2)
                     assert new_p >= p_initial
 
                 new_mean = mean.copy()
@@ -169,7 +169,7 @@ class GSF:
                 logging.debug("GSF | {} propagation failed".format(direction_str))
                 return None
 
-            logging.debug("GSF | {} step parameter: {}".format(direction_str, gaussian_mixture_moments(components)[0]))
+            logging.debug("GSF | {} step parameter: {} ({} cmps)".format(direction_str, gaussian_mixture_moments(components)[0], len(components)))
             predicted_states.append(copy.deepcopy(components))
 
             components = self.kalman_update(components, meas_pars, meas_cov)

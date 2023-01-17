@@ -4,6 +4,7 @@ from apyts.constants import *
 from apyts.gsf_utils import *
 
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 import numpy as np
 import scipy.stats as stats
 
@@ -34,66 +35,99 @@ def component_fn(x, component, idx, unit=1.0):
     return [ w*stats.norm.pdf(xx, mean[idx]/unit, np.sqrt(cov[idx, idx])/unit) for xx in x ]
 
 
-def plot_mixture(components, true_pars):
+def plot_mixtures_loc_phi_qop_p(components, true_pars):
     fig, axes = plt.subplots(1,4)
     fig.suptitle("Final Mixture")
-    for ax, idx, name, xlim in zip(axes[:3], [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"], [5, 3, 0.3]):
+    for ax, idx, name in zip(axes[:3], [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"]):
         unit, unit_name = unit_info(idx)
-        mode = gaussian_mixture_mode(components)[0][0][idx]/unit
-        mean = gaussian_mixture_moments(components)[0][idx]/unit
-        maxw = max(components, key=lambda c: c[0])[1][idx]/unit
-        true = true_pars[idx]/unit
-        xlim = (mode-xlim, mode+xlim)
-
-        logging.info("{}: true={:.3f}, mode={:.3f}, mean={:.3f}, maxw={:.3f}".format(name, true, mode, mean, maxw))
-
-        x = np.linspace(*xlim,200)
-        ax.plot(x, np.array(mixture_fn(x, components, idx, unit=unit)), lw=3, color='black')
-        for cmp in components:
-            ax.plot(x, np.array(component_fn(x, cmp, idx, unit=unit)), lw=1, color='darkgrey')
+        plot_mixture(ax, components, idx, unit)
+        ax.set_xlabel("{} [{}]".format(name.lower(), unit_name))
         ax.set_title(name)
-        ax.set_xlabel("{} [{}]".format(name, unit_name))
-
-        ymax = ax.get_ylim()[1]
-
-        ax.vlines(true, color='tab:blue', ls="-", ymin=0, ymax = ymax, label="true", lw=2)
-        ax.vlines(mean, color='tab:orange', ls="--", ymin=0, ymax = ymax, label="mean", lw=1)
-        ax.vlines(mode, color='tab:red', ls="--", ymin=0, ymax = ymax, label="mode", lw=1)
-        ax.vlines(maxw, color='tab:green', ls="--", ymin=0, ymax = ymax, label="maxw", lw=1)
         ax.legend()
-        ax.set_ylim((0, ymax))
+        ax.vlines(true_pars[idx]/unit, color='tab:blue', ls="-", ymin=0, ymax = ax.get_ylim()[1], label="true", lw=2)
 
-    # momentum
-    mode = abs(1./gaussian_mixture_mode(components)[0][0][eBoundQoP])/u.GeV
-    mean = abs(1./gaussian_mixture_moments(components)[0][eBoundQoP])/u.GeV
-    maxw = abs(1./max(components, key=lambda c: c[0])[1][eBoundQoP])/u.GeV
-    true = abs(1./true_pars[eBoundQoP])/u.GeV
-    xlim = (mode-1, mode+1)
-
-    logging.info("Momentum: true={:.3f}, mode={:.3f}, mean={:.3f}, maxw={:.3f}".format(true, mode, mean, maxw))
-
+    # Momentum
     def trafo_to_momentum(mean, cov):
         p = abs(1./mean[eBoundQoP])
         mean[eBoundQoP] = p
         cov[eBoundQoP, eBoundQoP] = p*p*cov[eBoundQoP, eBoundQoP]
         return mean, cov
 
-    components = [ (w, *trafo_to_momentum(p, c)) for w, p, c in components ]
-
-    x = np.linspace(*xlim,200)
-    axes[3].plot(x, np.array(mixture_fn(x, components, eBoundQoP, unit=u.GeV)), lw=3, color='black')
-    for cmp in components:
-        axes[3].plot(x, np.array(component_fn(x, cmp, eBoundQoP, unit=u.GeV)), lw=1, color='darkgrey')
-    axes[3].set_title("Momentum")
+    pcomponents = [ (w, *trafo_to_momentum(p, c)) for w, p, c in components ]
+    plot_mixture(axes[3], pcomponents, eBoundQoP, unit=1.0)
     axes[3].set_xlabel("{} [{}]".format("p", "GeV"))
-
-    ymax = axes[3].get_ylim()[1]
-
-    axes[3].vlines(true, color='tab:blue', ls="-", ymin=0, ymax = ymax, label="true", lw=2)
-    axes[3].vlines(mean, color='tab:orange', ls="--", ymin=0, ymax = ymax, label="mean", lw=1)
-    axes[3].vlines(mode, color='tab:red', ls="--", ymin=0, ymax = ymax, label="mode", lw=1)
-    axes[3].vlines(maxw, color='tab:green', ls="--", ymin=0, ymax = ymax, label="maxw", lw=1)
+    axes[3].set_title(name)
     axes[3].legend()
-    axes[3].set_ylim((0, ymax))
+    axes[3].vlines(1./true_pars[eBoundQoP], color='tab:blue', ls="-", ymin=0, ymax = axes[3].get_ylim()[1], label="true", lw=2)
 
     return fig, ax
+
+def plot_mixture(ax, components, idx, unit):
+    mode = gaussian_mixture_mode(components)[0][0][idx]/unit
+    moments = gaussian_mixture_moments(components)
+    mean = moments[0][idx]/unit
+    stddev = np.sqrt(moments[1][idx,idx])/unit
+    maxw = max(components, key=lambda c: c[0])[1][idx]/unit
+    xlim = (mode-3*stddev, mode+3*stddev)
+
+
+    x = np.linspace(*xlim,200)
+    ax.plot(x, np.array(mixture_fn(x, components, idx, unit=unit)), lw=3, color='black')
+    for cmp in components:
+        ax.plot(x, np.array(component_fn(x, cmp, idx, unit=unit)), lw=1, color='darkgrey')
+
+    ymax = ax.get_ylim()[1]
+
+    ax.vlines(mean, color='tab:orange', ls="--", ymin=0, ymax = ymax, label="mean", lw=1)
+    ax.vlines(mode, color='tab:red', ls="--", ymin=0, ymax = ymax, label="mode", lw=1)
+    ax.vlines(maxw, color='tab:green', ls="--", ymin=0, ymax = ymax, label="maxw", lw=1)
+
+    logging.debug("plot_mixture | idx {}: mode={:.3f}, mean={:.3f}, maxw={:.3f}".format(idx, mode, mean, maxw))
+
+    ax.set_ylim((0, ymax))
+    return ax
+
+class SurfaceSlideShow:
+    def make_slideshow(self):
+        fig, axes = plt.subplots(self.n_rows,self.n_cols)
+        axes = axes.reshape(self.n_rows,self.n_cols)
+
+        def plot_surface(surface):
+            surface = surface % self.n_surfaces
+            for row in range(self.n_rows):
+                for col, ax in enumerate(axes[row,:]):
+                    ax.clear()
+                    self.plot(ax, surface, row, col)
+
+            fig.suptitle("Surface {}".format(surface))
+
+        plot_surface(0)
+
+        class Callback(object):
+            idx = 0
+
+            def next(self, event):
+                self.idx += 1
+                plot_surface(self.idx)
+                plt.draw()
+
+            def prev(self, event):
+                self.idx -= 1
+                plot_surface(self.idx)
+                plt.draw()
+
+        self.callback = Callback()
+
+        fig.subplots_adjust(left = 0.0, top = 0.9, right = 1, bottom = 0.0, hspace = 0.0, wspace = 0.0)
+        fig.tight_layout(pad=0, h_pad=0.1, w_pad=0)
+
+        button_x = 0.7
+        button_y = 0.97
+
+        button_width = 0.1
+        button_height = 0.02
+
+        self.bprev = Button(plt.axes([button_x, button_y, button_width, button_height]), 'Previous')
+        self.bprev.on_clicked(self.callback.prev)
+        self.bnext = Button(plt.axes([button_x + button_width + 0.01, button_y, button_width, button_height]), 'Next')
+        self.bnext.on_clicked(self.callback.next)
