@@ -8,15 +8,23 @@ from matplotlib.widgets import Button
 import numpy as np
 import scipy.stats as stats
 
-def plot_hists(data, fit_gaussian=False, **kwargs):
-    fig, axes = plt.subplots(1, 3)
-    for ax, idx, name in zip(axes, [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"]):
-        _, bins, _ = ax.hist(data[:,idx], **kwargs, density=fit_gaussian)
+def plot_hists(df, fit_gaussian=False, stddev_range=3, **kwargs):
+    if len(df.columns) == 4:
+        shape = (2,2)
+    else:
+        shape = (1, len(df.columns))
+    
+    fig, axes = plt.subplots(*shape)
+    for ax, name in zip(axes.flatten(), df.columns):
+        mean = np.mean(df[name])
+        std = np.std(df[name])
+        x_range = (mean-stddev_range*std, mean+stddev_range*std)
+        
+        ax.hist(np.clip(df[name], *x_range),
+                range=x_range, density=fit_gaussian, **kwargs)
         ax.set_title(name)
         if fit_gaussian:
-            mean = np.mean(data[:,idx])
-            std = np.std(data[:,idx])
-            x = np.linspace(bins[0], bins[-1], 200)
+            x = np.linspace(*x_range, 200)
             ax.plot(x, stats.norm.pdf(x, mean, std), label="µ={:.2f}, s={:.2f}".format(mean, std))
             ax.legend()
     return fig, ax

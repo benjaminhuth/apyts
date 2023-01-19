@@ -1,13 +1,14 @@
 import numpy as np
 
-from geometry import *
+from apyts.geometry import *
+import apyts.units as u
 
 def test_propagation(pars, from_surface, to_surface, fig_and_ax):
     geometry = Geometry(
         surfaces=[0,50],
         surface_radius=100,
         thickness_in_x0=1/kSiRadiationLength,
-        b_field = 2*kTesla,
+        b_field = 2*u.Tesla,
         limit_plot_to_detector=True,
         fig_and_ax=fig_and_ax,
     )
@@ -56,7 +57,7 @@ for direction, q, ax in zip(directions, charges, axes.flatten()):
     pars = np.array([
         loc0,
         0.15*np.pi, # phi
-        q / (0.3*kGeV), # qop
+        q / (0.3*u.GeV), # qop
     ])
 
     ax.set_title("q = {}, direction={}".format(q, direction))

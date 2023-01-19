@@ -18,7 +18,7 @@ for ax, thickness_in_x0 in zip(axes, [0.02, 0.1, 0.2]):
     ax.set_title("x/x0 = {}".format(thickness_in_x0))
     ax.plot(z, fz, c='r', lw=2)
 
-    cmps = approx_bethe_heitler_distribution(thickness_in_x0)
+    cmps = approx_bethe_heitler_distribution(thickness_in_x0, single_component_approx=False)
 
     ax.plot(z, [ sum([ w*stats.norm.pdf(xx, mean, np.sqrt(var)) for w, mean, var in cmps ]) for xx in z], lw=2, color='black')
 

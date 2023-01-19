@@ -19,7 +19,7 @@ import apyts.units as u
 
 from test_utils import *
 
-def test_pulls():
+def test_pulls(n_particles : int, output_path : Path = None):
     logging.info("Start")
     geometry = Geometry([0, 100, 200, 300, 400, 500, 600, 700, 800, 900],
                         surface_radius=300 * u.mm,
@@ -28,20 +28,14 @@ def test_pulls():
                         no_plot=True,
     )
 
-    n_particles = 500
-    write_to_file = False
-
-    if write_to_file:
-        output_folder = Path("output/{}".format(datetime.datetime.now().strftime("%Y%m%d_%H%M%S")))
-        output_folder.mkdir(parents=True)
-
     ############
     # Simulate #
     ############
 
-    std_simulation = 0.01 * u.mm
+    stddev_sim = 0.01 * u.mm
     simulate_radiation_loss = True
-    simulation = Simulation(geometry, smearing_stddev=std_simulation, simulate_radiation_loss=simulate_radiation_loss)
+    logging.info("Simulation: smearing std = {}, radiation_loss = {}".format(stddev_sim, simulate_radiation_loss))
+    simulation = Simulation(geometry, smearing_stddev=stddev_sim, simulate_radiation_loss=simulate_radiation_loss)
 
     if False:
         charges = np.random.choice([-1, 1], size=n_particles)
@@ -49,33 +43,20 @@ def test_pulls():
         phis = np.random.uniform(60*u.degree, 120*u.degree, size=n_particles)
         locs = np.random.uniform(-10*u.mm, 10*u.mm, size=n_particles)
         qops = charges / momenta
+        logging.info("Random start parameters")
     else:
         locs = np.full(n_particles, 0*u.mm)
         phis = np.full(n_particles, 90*u.degree)
         qops = -1./np.full(n_particles, 4*u.GeV)
+        logging.info("Fixed start parameters ({:.2f},{:.2f},{:.2f})".format(locs[0], phis[0], qops[0]))
 
     true_pars = np.stack((locs, phis, qops), axis=1)
 
-    sim_data = [ simulation.simulate(pars, kElectronMass) for pars in true_pars ]
+    sim_results = [ simulation.simulate(pars, kElectronMass) for pars in true_pars ]
 
-    # Filter energy loss on first surface out since GSF cannot detect it
-    if False:
-        eloss_on_first_surface_mask = np.array([
-            True if abs(1./truth[1][eBoundQoP])/abs(1./truth[0][eBoundQoP]) < 0.99 else False for _, truth, _ in sim_data
-        ])
-        logging.info("Number of energy loss on first surface: {}".format(sum(eloss_on_first_surface_mask)))
-
-        true_pars = true_pars[np.logical_not(eloss_on_first_surface_mask)]
-        sim_data = [ sd for sd, keep in zip(sim_data, np.logical_not(eloss_on_first_surface_mask)) if keep ]
-        n_particles -= sum(eloss_on_first_surface_mask)
-
-    energy_loss = np.array([
-        abs(1./truth_sim[-1][eBoundQoP]) - abs(1./truth_start[eBoundQoP]) for (_, truth_sim, _), truth_start in zip(sim_data, true_pars)
-    ])
-
-    if write_to_file:
-        with open(output_folder / "sim_data.pickle", 'wb') as f:
-            pickle.dump((true_pars, sim_data, std_simulation, simulate_radiation_loss), f)
+    if output_path:
+        with open(output_path / "sim_result.pickle", 'wb') as f:
+            pickle.dump(dict(true_pars=true_pars, sim_results=sim_results, stddev_sim=stddev_sim, simulate_rad_loss=simulate_radiation_loss), f)
             logging.info("Wrote simulation data to '{}'".format(f.name))
 
     logging.info("Done with simulation")
@@ -90,8 +71,10 @@ def test_pulls():
 
     # Momentum dependent cov for qop
     std_p_rel = 0.05
-    p = true_pars[:, eBoundQoP]
+    p = abs(1./true_pars[:, eBoundQoP])
     std_qop = std_p_rel * p / p**2
+    
+    logging.info("Start parameter smearing std: ({:.2f}, {:.2f}, {:.2f}+-{:.2f})".format(std_loc, std_phi, np.mean(std_qop), np.std(std_qop)))
 
     smearing = np.stack([
         std_loc * np.random.normal(0, 1, size=n_particles),
@@ -110,14 +93,16 @@ def test_pulls():
     # exit()
 
     var_inflation = 100
+    logging.info("variance inflation: {}".format(var_inflation))
+    
     covs = np.zeros((n_particles,3,3))
     covs[:,eBoundLoc, eBoundLoc] = var_inflation * std_loc**2
     covs[:,eBoundPhi, eBoundPhi] = var_inflation * std_phi**2
     covs[:,eBoundQoP, eBoundQoP] = var_inflation * std_qop**2
 
-    if write_to_file:
-        with open(output_folder / "start_parameters.pickle", 'wb') as f:
-            pickle.dump((smeared_pars, covs), f)
+    if output_path:
+        with open(output_path / "start_parameters.pickle", 'wb') as f:
+            pickle.dump(dict(parameters=smeared_pars, covs=covs, smeared=True), f)
             logging.info("Wrote start data to '{}'".format(f.name))
 
     ##################
@@ -130,66 +115,17 @@ def test_pulls():
     gsf = GSF(geometry, projector, max_components=12, weight_cutoff=1.e-8, full_kl_divergence=False)
 
     def fit(fitter, name):
-        fit_data = [
-            fitter.fit(pars, cov, surfaces, measuements, len(surfaces)*[std_simulation**2])
-            for pars, cov, (measuements, _, surfaces) in zip(smeared_pars, covs, sim_data)
+        fit_result = [
+            fitter.fit(pars, cov, surfaces, measuements, len(surfaces)*[stddev_sim**2])
+            for pars, cov, (measuements, _, surfaces) in zip(smeared_pars, covs, sim_results)
         ]
 
-        if write_to_file:
-            with open(output_folder / "{}_fit_data.pickle".format(name.lower()), 'wb') as f:
-                pickle.dump(fit_data, f)
+        if output_path:
+            with open(output_path / "{}_fit_result.pickle".format(name.lower()), 'wb') as f:
+                pickle.dump(dict(fit_result=fit_result), f)
                 logging.info("Wrote fit data to '{}'".format(f.name))
 
         logging.info("Done with {} fitting".format(name))
-        mask = np.array([ False if data is None else True for data in fit_data ])
-        fit_data = [ d for d in fit_data if d is not None ]
-
-        assert len(mask) > 0
-        logging.info("fit failed for {}/{} ({:.2f}%) of particles".format(sum(np.logical_not(mask)), len(mask), 100.*sum(np.logical_not(mask))/len(mask)))
-
-        # Make residuals
-        if type(fitter) == GSF:
-            # final_pars = np.stack([ gaussian_mixture_mode(cmps)[0][0] for cmps, _, _, _ in fit_data ])
-            final_pars = np.stack([ max(cmps, key=lambda c: c[0])[1] for cmps, _, _, _ in fit_data ])
-            # final_pars = np.stack([ gaussian_mixture_moments(cmps)[0] for cmps, _, _, _ in fit_data ])
-        else:
-            final_pars = np.stack([ data[0][0] for data in fit_data ])
-
-        residuals = final_pars - true_pars[mask]
-
-        # residuals[:, eBoundLoc] = np.clip(residuals[:,eBoundLoc], -2*u.mm, 2*u.mm)
-        # residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -10*u.degree, 10*u.degree)
-        # residuals[:, eBoundPhi] = np.clip(residuals[:,eBoundPhi], -0.5, 0.5)
-
-        res_momentum = abs(1./final_pars[:,eBoundQoP]) - abs(1./true_pars[mask][:,eBoundQoP])
-
-        fig, ax = plot_hists(residuals, bins="rice")
-        fig.suptitle("Residuals {}".format(name))
-
-        fig, ax = plt.subplots()
-        ax.hist(res_momentum, bins="rice")
-        ax.set_title("Momentum res {}".format(name))
-
-        fig, ax = plt.subplots(2)
-        ax[0].set_title("{}: res vs loss".format(name))
-
-        ax[0].scatter(res_momentum, energy_loss[mask], alpha=0.3)
-
-        if simulate_radiation_loss:
-            ax[1].set_title("Correlation coefficient")
-            keys = ["res p", "energy_loss"]
-            im = ax[1].imshow(np.corrcoef(np.vstack([res_momentum, energy_loss[mask]])), origin="lower", aspect=0.3, vmin=-1, vmax=1)
-            fig.colorbar(im, ax=ax[1], label='Interactive colorbar')
-
-            ax[1].set_xticks(np.arange(len(keys)))
-            ax[1].set_yticks(np.arange(len(keys)))
-
-            ax[1].set_xticklabels(keys)
-            ax[1].set_yticklabels(keys)
-
-        fig.tight_layout()
-
-
 
     fit(kf, "KF")
     fit(gsf, "GSF")
@@ -202,8 +138,13 @@ if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s\t%(levelname)s\t%(message)s', datefmt='%H:%M:%S')
 
     plt.set_loglevel("warn")
-    np.random.seed(1234)
+    np.random.seed(12345)
+    
+    n_particles = 2000
+    logging.info("2000 particles")
 
-    test_pulls()
+    output_path = Path("output/{}-{}particles".format(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"), n_particles))
+    output_path.mkdir(parents=True)
+    test_pulls(n_particles, output_path)
 
 

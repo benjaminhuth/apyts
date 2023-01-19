@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from apyts.geometry import *
@@ -84,7 +85,9 @@ def test_pulls():
 
     # Make residuals
     final_pars = np.stack([ data[0][0] for data in fit_data if data is not None ])
-    residuals = true_pars[mask] - final_pars
+    
+    residuals = pd.DataFrame() 
+    residuals[["LOC","PHI","QOP"]] = true_pars[mask] - final_pars
 
     fig, ax = plot_hists(residuals, bins="rice")
     fig.suptitle("Residuals")
