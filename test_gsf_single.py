@@ -12,7 +12,7 @@ from apyts.simulation import *
 from apyts.constants import *
 import apyts.units as u
 
-from test_utils import *
+from apyts.test_utils import *
 
 
 class CompoentsSlideShow(SurfaceSlideShow):
@@ -162,8 +162,8 @@ def test_single_particle():
 
     ax.legend()
 
-    slideshow = CompoentsSlideShow(predicted, filtered, smoothed, measurements, truth)
-    slideshow.make_slideshow()
+    #slideshow = CompoentsSlideShow(predicted, filtered, smoothed, measurements, truth)
+    #slideshow.make_slideshow()
 
     plt.show()
     # plt.close('all')

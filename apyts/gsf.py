@@ -7,6 +7,7 @@ import scipy.stats as stats
 from .geometry import *
 from .kalman_fitter import kalman_update
 from .gsf_utils import *
+from .test_utils import *
 
 def full_symmetric_kl_divergence(mu_a, cov_a, mu_b, cov_b):
     def kl_divergence(mu_a, cov_a, mu_b, cov_b):
@@ -119,6 +120,21 @@ class GSF:
 
 
     def reduce_components(self, components : list):
+        # from scipy.stats import multivariate_normal
+        
+        # Just loc and qop
+        # mask = np.array([True, False, True])
+        
+        # loc = [ m[eBoundLoc] for w, m, c in components ]
+        # 
+        # dists_start = [ (w, multivariate_normal(m[mask], c[:,mask][mask,:])) for w, m, c in components ]
+        # fig, ax = plt.subplots()
+        # x, y = np.mgrid[min(loc)-.5:max(loc)+.5:.1, -1.:0.5:.1]
+        # ax.contourf(x, y, sum([ w*d.pdf(np.dstack((x, y))) for w, d in dists_start ]))
+        
+        # fig, ax = plot_mixtures_loc_phi_qop_p(components, draw_mode=False)
+        # fig.suptitle("BEFORE ({} cmps)".format(len(components)))
+        
         while len(components) > self.max_components:
             min_dist = np.inf
 
@@ -151,6 +167,11 @@ class GSF:
             components.pop(j)
 
         assert len(components) <= self.max_components
+
+        # fig, ax = plot_mixtures_loc_phi_qop_p(components, draw_mode=False)
+        # fig.suptitle("AFTER ({} cmps)".format(len(components)))
+        # plt.show()
+
         return components
 
 

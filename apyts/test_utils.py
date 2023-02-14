@@ -1,7 +1,7 @@
 import pprint
 
-from apyts.constants import *
-from apyts.gsf_utils import *
+from .constants import *
+from .gsf_utils import *
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
@@ -43,16 +43,16 @@ def component_fn(x, component, idx, unit=1.0):
     return [ w*stats.norm.pdf(xx, mean[idx]/unit, np.sqrt(cov[idx, idx])/unit) for xx in x ]
 
 
-def plot_mixtures_loc_phi_qop_p(components, true_pars):
+def plot_mixtures_loc_phi_qop_p(components, true_pars=None, draw_mode=True):
     fig, axes = plt.subplots(1,4)
-    fig.suptitle("Final Mixture")
     for ax, idx, name in zip(axes[:3], [eBoundLoc, eBoundPhi, eBoundQoP], ["LOC", "PHI", "QOP"]):
         unit, unit_name = unit_info(idx)
-        plot_mixture(ax, components, idx, unit)
+        plot_mixture(ax, components, idx, unit, draw_mode=draw_mode)
         ax.set_xlabel("{} [{}]".format(name.lower(), unit_name))
         ax.set_title(name)
         ax.legend()
-        ax.vlines(true_pars[idx]/unit, color='tab:blue', ls="-", ymin=0, ymax = ax.get_ylim()[1], label="true", lw=2)
+        if not true_pars is None:
+            ax.vlines(true_pars[idx]/unit, color='tab:blue', ls="-", ymin=0, ymax = ax.get_ylim()[1], label="true", lw=2)
 
     # Momentum
     def trafo_to_momentum(mean, cov):
@@ -61,23 +61,19 @@ def plot_mixtures_loc_phi_qop_p(components, true_pars):
         cov[eBoundQoP, eBoundQoP] = p*p*cov[eBoundQoP, eBoundQoP]
         return mean, cov
 
-    pcomponents = [ (w, *trafo_to_momentum(p, c)) for w, p, c in components ]
-    plot_mixture(axes[3], pcomponents, eBoundQoP, unit=1.0)
+    pcomponents = [ (w, *trafo_to_momentum(p.copy(), c.copy())) for w, p, c in components ]
+    plot_mixture(axes[3], pcomponents, eBoundQoP, unit=1.0, draw_mode=draw_mode)
     axes[3].set_xlabel("{} [{}]".format("p", "GeV"))
-    axes[3].set_title(name)
+    axes[3].set_title("P")
     axes[3].legend()
-    axes[3].vlines(1./true_pars[eBoundQoP], color='tab:blue', ls="-", ymin=0, ymax = axes[3].get_ylim()[1], label="true", lw=2)
+    if not true_pars is None:
+        axes[3].vlines(1./true_pars[eBoundQoP], color='tab:blue', ls="-", ymin=0, ymax = axes[3].get_ylim()[1], label="true", lw=2)
 
     return fig, ax
 
-def plot_mixture(ax, components, idx, unit):
-    mode = gaussian_mixture_mode(components)[0][0][idx]/unit
-    moments = gaussian_mixture_moments(components)
-    mean = moments[0][idx]/unit
-    stddev = np.sqrt(moments[1][idx,idx])/unit
-    maxw = max(components, key=lambda c: c[0])[1][idx]/unit
-    xlim = (mode-3*stddev, mode+3*stddev)
-
+def plot_mixture(ax, components, idx, unit, draw_mode=True):
+    ranges = sum([ [m[idx]/unit+3*np.sqrt(s[idx,idx])/unit, m[idx]/unit-3*np.sqrt(s[idx,idx])/unit] for _, m, s in components ], [])
+    xlim = (min(ranges), max(ranges))
 
     x = np.linspace(*xlim,200)
     ax.plot(x, np.array(mixture_fn(x, components, idx, unit=unit)), lw=3, color='black')
@@ -86,9 +82,18 @@ def plot_mixture(ax, components, idx, unit):
 
     ymax = ax.get_ylim()[1]
 
+    moments = gaussian_mixture_moments(components)
+    mean = moments[0][idx]/unit
+    maxw = max(components, key=lambda c: c[0])[1][idx]/unit
+
     ax.vlines(mean, color='tab:orange', ls="--", ymin=0, ymax = ymax, label="mean", lw=1)
-    ax.vlines(mode, color='tab:red', ls="--", ymin=0, ymax = ymax, label="mode", lw=1)
     ax.vlines(maxw, color='tab:green', ls="--", ymin=0, ymax = ymax, label="maxw", lw=1)
+    
+    if draw_mode:
+        mode = gaussian_mixture_mode(components)[0][0][idx]/unit
+        ax.vlines(mode, color='tab:red', ls="--", ymin=0, ymax = ymax, label="mode", lw=1)
+    else:
+        mode = np.nan
 
     logging.debug("plot_mixture | idx {}: mode={:.3f}, mean={:.3f}, maxw={:.3f}".format(idx, mode, mean, maxw))
 
